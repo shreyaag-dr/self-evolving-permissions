@@ -1,0 +1,208 @@
+{
+  "_description": "Curated registry of Bash command patterns with risk classification and persona tags. Used by the permission-audit skill to recommend safe additions to settings.json.",
+  "commands": [
+    {
+      "pattern": "ls",
+      "risk": "safe",
+      "personas": ["developer", "pm", "enterprise"],
+      "description": "List directory contents",
+      "reason": "Read-only, no side effects"
+    },
+    {
+      "pattern": "cat",
+      "risk": "safe",
+      "personas": ["developer", "pm", "enterprise"],
+      "description": "Read file contents",
+      "reason": "Read-only"
+    },
+    {
+      "pattern": "mkdir",
+      "risk": "safe",
+      "personas": ["developer", "pm", "enterprise"],
+      "description": "Create directories",
+      "reason": "Non-destructive, creates only"
+    },
+    {
+      "pattern": "touch",
+      "risk": "safe",
+      "personas": ["developer", "pm", "enterprise"],
+      "description": "Create empty files or update timestamps",
+      "reason": "Non-destructive"
+    },
+    {
+      "pattern": "date",
+      "risk": "safe",
+      "personas": ["developer", "pm", "enterprise"],
+      "description": "Get current date/time",
+      "reason": "Read-only system call"
+    },
+    {
+      "pattern": "echo",
+      "risk": "safe",
+      "personas": ["developer", "pm", "enterprise"],
+      "description": "Print text or write to files",
+      "reason": "No network or system access"
+    },
+    {
+      "pattern": "pwd",
+      "risk": "safe",
+      "personas": ["developer", "pm", "enterprise"],
+      "description": "Print working directory",
+      "reason": "Read-only"
+    },
+    {
+      "pattern": "head",
+      "risk": "safe",
+      "personas": ["developer", "pm", "enterprise"],
+      "description": "Read first N lines of a file",
+      "reason": "Read-only"
+    },
+    {
+      "pattern": "tail",
+      "risk": "safe",
+      "personas": ["developer", "pm", "enterprise"],
+      "description": "Read last N lines of a file",
+      "reason": "Read-only"
+    },
+    {
+      "pattern": "wc",
+      "risk": "safe",
+      "personas": ["developer", "pm", "enterprise"],
+      "description": "Word/line/character count",
+      "reason": "Read-only"
+    },
+    {
+      "pattern": "sort",
+      "risk": "safe",
+      "personas": ["developer", "pm", "enterprise"],
+      "description": "Sort input",
+      "reason": "Read-only transformation"
+    },
+    {
+      "pattern": "uniq",
+      "risk": "safe",
+      "personas": ["developer", "pm", "enterprise"],
+      "description": "Filter duplicate lines",
+      "reason": "Read-only transformation"
+    },
+    {
+      "pattern": "grep",
+      "risk": "safe",
+      "personas": ["developer", "pm", "enterprise"],
+      "description": "Search file contents",
+      "reason": "Read-only"
+    },
+    {
+      "pattern": "find",
+      "risk": "safe",
+      "personas": ["developer", "pm", "enterprise"],
+      "description": "Find files by pattern",
+      "reason": "Read-only filesystem traversal"
+    },
+    {
+      "pattern": "which",
+      "risk": "safe",
+      "personas": ["developer", "pm", "enterprise"],
+      "description": "Locate a command",
+      "reason": "Read-only"
+    },
+    {
+      "pattern": "cp",
+      "risk": "safe",
+      "personas": ["developer", "pm"],
+      "description": "Copy files",
+      "reason": "Non-destructive, creates copies"
+    },
+    {
+      "pattern": "mv",
+      "risk": "review",
+      "personas": ["developer", "pm"],
+      "description": "Move or rename files",
+      "reason": "Changes filesystem state but reversible"
+    },
+    {
+      "pattern": "jq",
+      "risk": "safe",
+      "personas": ["developer", "pm"],
+      "description": "Parse and query JSON",
+      "reason": "Read-only transformation, no network"
+    },
+    {
+      "pattern": "python3",
+      "risk": "review",
+      "personas": ["developer"],
+      "description": "Run Python scripts",
+      "reason": "Depends entirely on script content"
+    },
+    {
+      "pattern": "git",
+      "risk": "review",
+      "personas": ["developer", "pm"],
+      "description": "Git version control",
+      "reason": "Safe for local ops; push/reset --hard are destructive. Consider scoping to git status, git log, git diff, git add, git commit"
+    },
+    {
+      "pattern": "npm",
+      "risk": "review",
+      "personas": ["developer"],
+      "description": "Node package manager",
+      "reason": "npm install executes post-install scripts from third parties"
+    },
+    {
+      "pattern": "gh",
+      "risk": "review",
+      "personas": ["developer"],
+      "description": "GitHub CLI",
+      "reason": "Can create PRs, issues, push code on your behalf"
+    },
+    {
+      "pattern": "brew",
+      "risk": "review",
+      "personas": ["developer", "pm"],
+      "description": "Homebrew package manager",
+      "reason": "Installs software; generally safe on personal machines"
+    },
+    {
+      "pattern": "open",
+      "risk": "safe",
+      "personas": ["developer", "pm"],
+      "description": "Open files or URLs in default app (macOS)",
+      "reason": "Non-destructive, opens local apps"
+    },
+    {
+      "pattern": "curl",
+      "risk": "review",
+      "personas": ["developer"],
+      "description": "HTTP requests",
+      "reason": "Can exfiltrate data or download/execute scripts. Review before allowing."
+    },
+    {
+      "pattern": "ssh",
+      "risk": "deny",
+      "personas": [],
+      "description": "Remote shell access",
+      "reason": "Grants access to remote systems. Never auto-allow."
+    },
+    {
+      "pattern": "sudo",
+      "risk": "deny",
+      "personas": [],
+      "description": "Superuser execution",
+      "reason": "Elevates to root. Never auto-allow."
+    },
+    {
+      "pattern": "rm -rf",
+      "risk": "deny",
+      "personas": [],
+      "description": "Recursive force delete",
+      "reason": "Catastrophic, irreversible. Never auto-allow."
+    },
+    {
+      "pattern": "chmod",
+      "risk": "deny",
+      "personas": [],
+      "description": "Change file permissions",
+      "reason": "Can expose sensitive files. Keep behind manual approval."
+    }
+  ]
+}
