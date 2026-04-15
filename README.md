@@ -28,25 +28,25 @@ There's no feedback loop between what Claude *tries* to do and what your config 
 
 ## Install
 
+One file. No install script.
+
 ```bash
-git clone https://github.com/shreyaagrawal/self-evolving-permissions
-cd self-evolving-permissions
-./install.sh
+curl -o ~/.claude/commands/permission-audit.md \
+  https://raw.githubusercontent.com/shreyaag-dr/self-evolving-permissions/main/skills/permission-audit.md
 ```
 
-Start a new Claude Code session after installing. Hooks apply to new sessions only.
+Then run `/permission-audit` in any Claude Code session. On first run it installs the logging hook and tells you to restart. After that, just use Claude normally.
 
 ## Usage
-
-Use Claude Code normally. The logger runs silently in the background.
-
-When you want an audit (recommended: weekly or monthly):
 
 ```
 /permission-audit
 ```
 
-Review the report. Copy the suggested lines into `~/.claude/settings.json`. Done.
+First run: bootstraps the hook, restart Claude Code.
+Every run after: audits your log and outputs a report with copy-pasteable suggestions.
+
+Recommended cadence: weekly if you use Claude Code heavily, monthly otherwise.
 
 ## Who this is for
 
