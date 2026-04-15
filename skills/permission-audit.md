@@ -1,117 +1,229 @@
 ---
 name: permission-audit
-description: Audit Claude Code permission prompts and suggest safe additions to settings.json. Never auto-applies. Always requires human approval.
+description: Self-bootstrapping Claude Code permission auditor. On first run, installs a silent hook that logs every permission prompt. On subsequent runs, analyzes the log and suggests safe additions to settings.json. Never auto-applies anything.
 ---
 
-You are running a permission audit for Claude Code. Your job is to analyze what commands have been triggering permission prompts, cross-reference against a curated safety registry, and produce a clear human-readable report with specific suggestions. You never modify settings.json yourself — the user decides what to apply.
-
----
-
-## STEP 1 — LOAD CONTEXT
-
-Read the following in parallel:
-
-1. The permission log: `~/.claude/logs/permission-prompts.jsonl`
-2. Current settings: `~/.claude/settings.json`
-3. Bash registry: Read the `registry/bash-safe.json` file from the self-evolving-permissions repo (check `~/workspace/self-evolving-permissions/registry/bash-safe.json`)
-4. MCP registry: `~/workspace/self-evolving-permissions/registry/mcp-safe.json`
-
-If the log file is empty or missing, output: "No permission events logged yet. Use Claude Code normally for a few days, then re-run this audit."
+You are a permission auditor for Claude Code. Your first job is to check whether the logging hook is installed. Based on that, you either bootstrap the system or run the audit.
 
 ---
 
-## STEP 2 — ANALYZE THE LOG
+## STEP 0 — CHECK BOOTSTRAP STATE
 
-Parse each line of the JSONL log. For each entry:
+Run this command to check if the hook is already installed:
 
-- Extract: `tool_name`, `command` (for Bash), `mcp_tool`, `event` (PermissionRequest vs PermissionDenied), `timestamp`
-- For Bash commands, extract the base command (first word, e.g. `jq` from `jq '.items[]' file.json`)
-- Group by base command or MCP tool name
-- Count frequency: how many times each was prompted
-- Note date range: first seen, last seen
+```
+ls ~/.claude/hooks/permission-logger.py
+```
 
----
-
-## STEP 3 — CLASSIFY AGAINST REGISTRY
-
-For each unique command/tool that appeared in the log:
-
-1. Check if it is already in the current `settings.json` allow list. If yes, skip it (it was prompted before the permission was added).
-2. Look it up in the registry. Classify as:
-   - **SAFE TO ADD** — registry says safe, no destructive potential
-   - **REVIEW FIRST** — registry says review, explain why and what to watch for
-   - **DO NOT ADD** — registry says deny, explain the risk
-   - **UNKNOWN** — not in registry, flag for manual research
+- If the file **does not exist**: run BOOTSTRAP MODE below.
+- If the file **exists**: skip to AUDIT MODE.
 
 ---
 
-## STEP 4 — GENERATE REPORT
+## BOOTSTRAP MODE
 
-Output a clean markdown report in this format:
+The logging hook is not installed. Set it up now.
+
+### 1. Create the hooks directory
+
+```bash
+mkdir -p ~/.claude/hooks
+mkdir -p ~/.claude/logs
+```
+
+### 2. Write the hook script
+
+Write the following content to `~/.claude/hooks/permission-logger.py`:
+
+```python
+#!/usr/bin/env python3
+"""
+permission-logger.py
+Installed by permission-audit skill (self-evolving-permissions).
+Hooks into PermissionRequest and PermissionDenied events.
+Appends structured log entries to ~/.claude/logs/permission-prompts.jsonl.
+"""
+
+import json
+import os
+import sys
+from datetime import datetime, timezone
+
+
+def main():
+    try:
+        data = json.load(sys.stdin)
+    except (json.JSONDecodeError, ValueError):
+        sys.exit(0)
+
+    event = data.get("hook_event_name", "")
+    if event not in ("PermissionRequest", "PermissionDenied"):
+        sys.exit(0)
+
+    log_dir = os.path.expanduser("~/.claude/logs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = os.path.join(log_dir, "permission-prompts.jsonl")
+
+    tool_name = data.get("tool_name", "")
+    tool_input = data.get("tool_input", {})
+    command = tool_input.get("command", "") if tool_name == "Bash" else ""
+
+    entry = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "event": event,
+        "tool_name": tool_name,
+        "command": command,
+        "tool_input": tool_input,
+        "reason": data.get("reason", ""),
+        "permission_mode": data.get("permission_mode", ""),
+        "session_id": data.get("session_id", ""),
+    }
+
+    with open(log_file, "a") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
+if __name__ == "__main__":
+    main()
+```
+
+### 3. Register the hooks in settings.json
+
+Run this Python snippet via Bash to safely add the hooks to `~/.claude/settings.json`:
+
+```bash
+python3 << 'EOF'
+import json, os
+
+settings_path = os.path.expanduser("~/.claude/settings.json")
+hook_script = os.path.expanduser("~/.claude/hooks/permission-logger.py")
+hook_entry = {"type": "command", "command": f"python3 {hook_script}"}
+
+with open(settings_path) as f:
+    settings = json.load(f)
+
+hooks = settings.setdefault("hooks", {})
+
+for event in ("PermissionRequest", "PermissionDenied"):
+    event_hooks = hooks.setdefault(event, [])
+    already = any(hook_script in str(h) for h in event_hooks)
+    if not already:
+        event_hooks.append({"matcher": "", "hooks": [hook_entry]})
+
+with open(settings_path, "w") as f:
+    json.dump(settings, f, indent=2)
+
+print("Done.")
+EOF
+```
+
+### 4. Tell the user
+
+Output this message and stop:
+
+---
+
+**Bootstrap complete.**
+
+The permission logger is now installed. It will silently log every permission prompt and auto-mode denial to:
+`~/.claude/logs/permission-prompts.jsonl`
+
+**You need to restart Claude Code for hooks to take effect.**
+
+After restarting, use Claude normally for a few days. Then run `/permission-audit` again to get your first audit report.
+
+---
+
+---
+
+## AUDIT MODE
+
+The hook is installed. Analyze the log and generate a report.
+
+### 1. Read inputs in parallel
+
+- Log file: `~/.claude/logs/permission-prompts.jsonl`
+- Current settings: `~/.claude/settings.json` (specifically the `permissions.allow` array)
+
+If the log file is empty or missing, output:
+> "No permission events logged yet. Use Claude Code normally for a few sessions, then re-run."
+And stop.
+
+### 2. Parse and group the log
+
+For each JSONL entry:
+- Extract `tool_name`, `command`, `event`, `timestamp`
+- For Bash: extract the base command (first word, e.g. `jq` from `jq '.x' file.json`)
+- For MCP tools: use the full tool name
+- Group by base command or tool name
+- Count frequency and note first/last seen dates
+
+### 3. Check against current allow list
+
+Extract what is already in `settings.json` permissions.allow. Skip anything already allowed — it was prompted before the permission was added and is no longer relevant.
+
+### 4. Classify each remaining command
+
+Use this registry (inline):
+
+**SAFE TO ADD — low risk, no network or destructive potential:**
+- Bash: `ls`, `cat`, `date`, `touch`, `echo`, `pwd`, `head`, `tail`, `wc`, `sort`, `uniq`, `grep`, `find`, `which`, `cp`, `jq`, `open`
+- MCP read tools: any tool matching `*read*`, `*search*`, `*list*`, `*get*`, `*fetch*`
+
+**REVIEW FIRST — carries some risk, explain before suggesting:**
+- Bash: `mv` (changes filesystem), `git` (push/reset are destructive — suggest scoping to subcommands), `npm`/`npx` (runs third-party scripts), `brew` (installs software), `curl`/`wget` (network + potential script execution), `gh` (acts as you on GitHub), `python3` (depends on script content)
+- MCP write tools: `*send*`, `*create*`, `*update*`, `*delete*`, `*post*`
+
+**DO NOT ADD — deny and explain why:**
+- Bash: `sudo`, `su`, `rm -rf`, `chmod`, `ssh`, `dd`, `mkfs`
+
+**UNKNOWN — not in registry, flag for manual research**
+
+### 5. Generate the report
+
+Output in this exact format:
 
 ```
 # Permission Audit Report
 Generated: [date]
-Log period: [first entry date] to [last entry date]
-Total permission events: [N]
+Log period: [first entry] to [last entry]
+Total events logged: [N]
+Already covered by allow list: [N] (skipped)
 
 ---
 
-## Recommended additions to settings.json
+## Add these — safe for your workflow
 
-These commands triggered prompts repeatedly and are safe to add for your workflow.
+[Table: Command | Times prompted | Notes]
 
-| Command | Prompted | Risk | Notes |
-|---------|----------|------|-------|
-| Bash(jq:*) | 14x | Safe | JSON parsing, read-only |
-| Bash(cp:*) | 6x | Safe | File copy, non-destructive |
-
-Suggested diff for settings.json:
-[Show exact JSON lines to add to the allow array, copy-pasteable]
+Copy into your settings.json allow array:
+[Exact JSON lines, copy-pasteable]
 
 ---
 
 ## Review before adding
 
-These triggered prompts but carry some risk. Read the notes before deciding.
-
-| Command | Prompted | Risk | Notes |
-|---------|----------|------|-------|
-| Bash(curl:*) | 3x | Review | Can make network requests. Consider Bash(curl -s:*) or deny entirely. |
+[Table: Command | Times prompted | Risk | What to watch for]
 
 ---
 
 ## Do not add
 
-| Command | Prompted | Notes |
-|---------|----------|-------|
-| Bash(sudo:*) | 1x | Superuser execution — never auto-allow |
+[Table: Command | Times prompted | Why]
 
 ---
 
-## Unknown — needs research
+## Unknown — research before deciding
 
-| Command | Prompted |
-|---------|----------|
-| Bash(someobscuretool:*) | 2x |
+[Table: Command | Times prompted]
 
 ---
 
-## No action needed
-
-[List any commands that appeared in log but are already in settings.json allow list]
-
----
-
-*To apply suggestions: copy the JSON lines above into the `allow` array in ~/.claude/settings.json. Restart Claude Code for changes to take effect. This report does not modify any files.*
+*Nothing has been changed. Copy the suggested lines into ~/.claude/settings.json and restart Claude Code.*
 ```
 
-Keep the report tight. Prioritize by frequency — highest-prompted commands first. If nothing needs adding, say so plainly.
-
----
-
-## STEP 5 — SAVE REPORT
+### 6. Save the report
 
 Write the report to `~/.claude/logs/permission-audit-[YYYY-MM-DD].md`.
 
-Tell the user where the report was saved and remind them: nothing has been changed in their settings. They decide what to apply.
+Tell the user where it was saved.
